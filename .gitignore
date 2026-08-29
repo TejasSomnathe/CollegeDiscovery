@@ -1,0 +1,7 @@
+# Environment files contain database credentials.
+.env
+.env.local
+
+# Generated dependencies and build output.
+node_modules/
+.next/
