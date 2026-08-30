@@ -6,7 +6,7 @@
 
 import { db } from "@/db";
 import { colleges, courses, placements, reviews, users } from "@/db/schema";
-import { and, desc, asc, ilike, gte, lte, eq, lt, or, sql } from "drizzle-orm";
+import { and, desc, asc, ilike, gte, lte, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { type CollegeListParams } from "@/lib/validations";
 import { encodeCursor, decodeCursor } from "@/lib/utils";
 
@@ -176,10 +176,7 @@ export async function getCollegesForCompare(ids: string[]) {
   const results = await db
     .select()
     .from(colleges)
-    .where(
-      // Use sql template to do an IN query while preserving order
-      sql`${colleges.id} = ANY(${ids})`
-    );
+    .where(inArray(colleges.id, ids));
 
   const courseMap = new Map<string, (typeof courses.$inferSelect)[]>();
   const placementMap = new Map<string, typeof placements.$inferSelect>();
