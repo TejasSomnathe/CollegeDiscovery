@@ -20,6 +20,10 @@ import { eq } from "drizzle-orm";
 import { loginSchema } from "@/lib/validations";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Netlify runs the app behind its proxy. Trust its forwarded host headers so
+  // Auth.js can construct the correct public callback and cookie URLs.
+  trustHost: true,
+
   providers: [
     Credentials({
       name: "Credentials",
