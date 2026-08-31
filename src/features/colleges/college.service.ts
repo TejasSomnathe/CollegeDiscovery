@@ -1,8 +1,4 @@
-/**
- * College service — all business logic for college queries.
- * Route handlers call these functions; they never query the DB directly.
- * This separation makes the logic independently testable.
- */
+
 
 import { db } from "@/db";
 import { colleges, courses, placements, reviews, users } from "@/db/schema";
@@ -10,7 +6,6 @@ import { and, desc, asc, ilike, gte, lte, eq, inArray, lt, or, sql } from "drizz
 import { type CollegeListParams } from "@/lib/validations";
 import { encodeCursor, decodeCursor } from "@/lib/utils";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type CollegeListItem = typeof colleges.$inferSelect;
 
@@ -24,16 +19,16 @@ export type CollegeDetail = CollegeListItem & {
   >;
 };
 
-// ─── List / Search ────────────────────────────────────────────────────────────
+
 
 export async function getColleges(params: CollegeListParams) {
   const { q, city, state, type, stream, feesMin, feesMax, minRating, sort, limit, cursor } =
     params;
 
-  // Build WHERE clauses dynamically
+  
   const conditions = [];
 
-  // Free-text search across name, city, state
+  
   if (q) {
     conditions.push(
       or(
@@ -50,20 +45,16 @@ export async function getColleges(params: CollegeListParams) {
   if (type) conditions.push(eq(colleges.type, type));
   if (stream) conditions.push(ilike(colleges.stream, `%${stream}%`));
 
-  // EDGE CASE: invalid fee ranges are caught by zod; here we also check logical order
+  
   if (feesMin !== undefined) conditions.push(gte(colleges.feesMax, feesMin));
   if (feesMax !== undefined) conditions.push(lte(colleges.feesMin, feesMax));
   if (minRating !== undefined) conditions.push(gte(colleges.avgRating, minRating));
 
-  // ── Cursor pagination ──────────────────────────────────────────────────────
-  // WHY cursor over offset: With offset pagination, if a new college is inserted
-  // between page fetches, records shift and the user sees duplicates or misses items.
-  // Cursor pagination is stable: we use (createdAt, id) as the cursor tuple.
-  // We encode them in a base64url string so the client treats it as opaque.
+ 
   if (cursor) {
     const decoded = decodeCursor(cursor);
     if (decoded) {
-      // Keyset: get rows where (createdAt, id) comes after the cursor position
+      
       conditions.push(
         or(
           lt(colleges.createdAt, decoded.createdAt),
@@ -71,11 +62,10 @@ export async function getColleges(params: CollegeListParams) {
         )
       );
     }
-    // EDGE CASE: malformed cursor → decodeCursor returns null → we ignore it
-    // and return the first page, preventing 400 errors for minor client bugs
+    
   }
 
-  // ── Sorting ───────────────────────────────────────────────────────────────
+ 
   const orderBy = (() => {
     switch (sort) {
       case "rating_asc":
@@ -96,15 +86,15 @@ export async function getColleges(params: CollegeListParams) {
     }
   })();
 
-  // Fetch limit+1 to determine if there is a next page without a separate COUNT query
+  
   const rows = await db
     .select()
     .from(colleges)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(...orderBy)
-    .limit(limit + 1); // fetch one extra to detect next page
+    .limit(limit + 1); 
 
-  // EDGE CASE: last page / no next cursor
+  
   const hasMore = rows.length > limit;
   const data = hasMore ? rows.slice(0, limit) : rows;
 
@@ -116,7 +106,7 @@ export async function getColleges(params: CollegeListParams) {
   return { data, nextCursor, hasMore };
 }
 
-// ─── Detail ───────────────────────────────────────────────────────────────────
+
 
 export async function getCollegeBySlug(
   slug: string,
@@ -170,7 +160,6 @@ export async function getCollegeBySlug(
   };
 }
 
-// ─── Compare ─────────────────────────────────────────────────────────────────
 
 export async function getCollegesForCompare(ids: string[]) {
   const results = await db
@@ -181,7 +170,7 @@ export async function getCollegesForCompare(ids: string[]) {
   const courseMap = new Map<string, (typeof courses.$inferSelect)[]>();
   const placementMap = new Map<string, typeof placements.$inferSelect>();
 
-  // Fetch courses and latest placement for each college in parallel
+
   await Promise.all(
     results.map(async (c) => {
       const [collegeCourses, latestPlacement] = await Promise.all([
@@ -199,7 +188,7 @@ export async function getCollegesForCompare(ids: string[]) {
     })
   );
 
-  // Preserve the requested order so the comparison columns match what the user selected
+  
   return ids
     .map((id) => results.find((c) => c.id === id))
     .filter((c): c is NonNullable<typeof c> => c !== undefined)
@@ -210,7 +199,6 @@ export async function getCollegesForCompare(ids: string[]) {
     }));
 }
 
-// ─── Add Review ───────────────────────────────────────────────────────────────
 
 export async function addReview(
   collegeId: string,
@@ -230,11 +218,7 @@ export async function addReview(
     .returning()
     .then((r) => r[0]);
 
-  // EDGE CASE: Recalculate avgRating synchronously after insert.
-  // WHY denormalized recalc here: A live aggregate (AVG()) on every listing page
-  // load would be expensive at scale. We pay the write cost once per review
-  // to keep reads fast. For very high write volume, a queue/background job
-  // would be better — noted in ARCHITECTURE.md tradeoffs.
+
   const ratingResult = await db
     .select({
       avg: sql<number>`AVG(${reviews.rating})::float`,
